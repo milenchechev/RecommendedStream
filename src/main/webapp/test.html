@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+        <script src="js/ui_helper.js"></script>
+        <script>
+            $(document).ready(function(){
+                $("button").click(function(){
+                    $.ajax({url:"http://localhost:8080/RecommendedStream/data/posts/get?access_token=AAACeB67jZAkEBAE4mCU2ZBAIS9a8NEm386Qj2JrpZCszcGhGvYP0nJFTOpSeGQZBr3EPHaFLD6XSLZADHJZBPeDJ7A5ZAZBfonSIFVlrpNxB3wZDZD", 
+                        type:"GET" ,
+                        success:function(data){
+                            updateNewsFeed();
+                        },
+                        error:function(xhr){
+                            console.log(xhr);
+                        }});
+                });
+            });
+        </script>
+        <script>
+            function myFunction()
+            {
+                
+                    
+                setInterval(function(){
+                    $.ajax({url:"http://localhost:8080/RecommendedStream/data/posts/get?access_token=AAACeB67jZAkEBAE4mCU2ZBAIS9a8NEm386Qj2JrpZCszcGhGvYP0nJFTOpSeGQZBr3EPHaFLD6XSLZADHJZBPeDJ7A5ZAZBfonSIFVlrpNxB3wZDZD&since=1356715718", type:"GET" ,
+                        success:function(data){
+                            updateNewsFeed(data);
+                            console.log("updated news feed")
+                        },
+                        error:function(xhr){
+                            console.log(xhr);
+                        }})},3000);
+            }
+        
+        </script>
+    </head>
+
+    <body>
+        <script>myFunction()</script>
+        <button>Action</button>
+    <center>
+        <div id="mainTableX">
+           
+                                </div>
+                                </center>
+                                </body>
+                                </html>
