@@ -23,8 +23,11 @@ import org.codehaus.jackson.map.ObjectMapper;
 
 import com.chechev.phd.recommendedstream.datatypes.AccessLog;
 import com.chechev.phd.recommendedstream.datatypes.ExtendedPost;
+import com.chechev.phd.recommendedstream.datatypes.ImdbMovie;
+import com.chechev.phd.recommendedstream.datatypes.Movie;
 import com.chechev.phd.recommendedstream.datatypes.User;
 import com.chechev.phd.utils.GlobalConstants;
+import com.chechev.phd.utils.Imdb;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
@@ -82,6 +85,7 @@ public class UserDataCollector implements Runnable {
             DBCollection collUserFriends = db.getCollection("user_friends");
             DBCollection collAccessLog = db.getCollection("user_access");
             DBCollection collFeed = db.getCollection("feed");
+            DBCollection collMovies = db.getCollection("movies");
             DBCollection collTrust = db.getCollection("user_trust");
             DBCollection collExplicitTrust = db.getCollection("explicit_user_trust");
             collFeed.createIndex(new BasicDBObject("id", 1));
@@ -163,6 +167,7 @@ public class UserDataCollector implements Runnable {
                 int count = 0;
                 CountDownLatch countDown = new CountDownLatch(friendsMap.size());
                 ConcurrentLinkedQueue<ExtendedPost> queue = new ConcurrentLinkedQueue<ExtendedPost>();
+                ConcurrentLinkedQueue<Movie> moviesQueue = new ConcurrentLinkedQueue<Movie>();
                 for (String friendId : friendsMap.keySet()) {
 
                     if (!isInitialLoad) {
@@ -170,6 +175,7 @@ public class UserDataCollector implements Runnable {
                     }
 
                     feedThreadPool.execute(new Helper(friendId, accessToken, countDown, queue));
+                    feedThreadPool.execute(new MovieHelper(userId, friendId, accessToken, countDown, moviesQueue));
 
                     count++;
                     if (count % 500 == 0) {
@@ -184,6 +190,7 @@ public class UserDataCollector implements Runnable {
                         }
                     }
                 }
+                feedThreadPool.execute(new MovieHelper(userId, userId, accessToken, countDown, moviesQueue));
                 countDown.await(1, TimeUnit.MINUTES);
 
                 HashMap<String, Integer> likedFriendsPosts = new HashMap<String, Integer>();
@@ -202,6 +209,19 @@ public class UserDataCollector implements Runnable {
                     }
                     accumulateUserActivity(likedFriendsPosts, commentedFriendsPosts, sharedFriendsPosts, commonActivityUsers, postsPerUser, post);
                     // TODO: add to news feed every post which is less then 24 hours old
+                }
+
+                while (!moviesQueue.isEmpty()) {
+                    Movie movie = moviesQueue.poll();
+                    o = new BasicDBObject();
+                    o.putAll(mapper.readValue(mapper.writeValueAsString(movie), HashMap.class));
+
+                    BasicDBObject searchObject = new BasicDBObject("id", movie.getId());
+                    searchObject.append("userId", movie.getUserId());
+                    searchObject.append("friendId", movie.getFriendId());
+                    if (collMovies.findAndModify(searchObject, o) == null) {
+                        collMovies.insert(o);
+                    }
                 }
 
                 //get explicit trust from MongoDB
@@ -409,8 +429,6 @@ public class UserDataCollector implements Runnable {
                 try {
                     tries++;
                     FacebookClient facebookClient = new DefaultFacebookClient(accessToken);
-                    ObjectMapper mapper = new ObjectMapper();
-
 
                     Connection<ExtendedPost> feedConnection = facebookClient.fetchConnection(friendId + "/feed", ExtendedPost.class, Parameter.with("fields", "likes.limit(200),id,from,picture,description,created_time,message,message_tags,story,story_tags,name,object_id,updated_time,type,to,with_tags,comments.limit(100),icon,application,privacy,status_type,link,caption,place,source"), Parameter.with("limit", "1000"));
                     List<ExtendedPost> feedList = feedConnection.getData();
@@ -419,8 +437,73 @@ public class UserDataCollector implements Runnable {
                     for (ExtendedPost post : feedList) {
                         queue.add(post);
                     }
+
                     if (feedList.size() == 0) {
                         Logger.getLogger(UserDataCollector.class.getName()).log(Level.INFO, "NO FEED FOR:" + friendId);
+                    }
+                    success = true;
+                } catch (Exception ex) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ex1) {
+                        return;
+                    }
+                    if (ex.getMessage().contains("600")) {
+                        try {
+                            Thread.sleep(60 * 1000);
+                        } catch (InterruptedException ex1) {
+                            return;
+                        }
+                    }
+                    Logger.getLogger(UserDataCollector.class.getName()).log(Level.WARNING, "exception at user feed collection:" + friendId + " retry..." + ex.getMessage());
+                }
+            }
+            countDown.countDown();
+        }
+    }
+
+    private static class MovieHelper implements Runnable {
+
+        String userId;
+        String friendId;
+        String accessToken;
+        CountDownLatch countDown;
+        ConcurrentLinkedQueue<Movie> movieQueue;
+
+        public MovieHelper(String userId, String friendId, String accessToken, CountDownLatch countDown, ConcurrentLinkedQueue movieQueue) {
+            this.userId = userId;
+            this.friendId = friendId;
+            this.accessToken = accessToken;
+            this.countDown = countDown;
+            this.movieQueue = movieQueue;
+        }
+
+        @Override
+        public void run() {
+            boolean success = false;
+            int tries = 0;
+
+
+            while (!success && tries < 5) {
+                try {
+                    tries++;
+                    FacebookClient facebookClient = new DefaultFacebookClient(accessToken);
+
+                    Connection<Movie> moviesConnection = facebookClient.fetchConnection(friendId + "/movies", Movie.class);
+                    List<Movie> movieList = moviesConnection.getData();
+
+                    for (Movie movie : movieList) {
+                        try {
+                            ImdbMovie m = Imdb.getMovie(movie.getName());
+                            movie.setUserId(userId);
+                            movie.setFriendId(friendId);
+                            movie.setImdbId(m.getImdbId());
+                            movie.setPoster(m.getPoster());
+                            movie.setRating(m.getImdbRating());
+                            movieQueue.add(movie);
+                        } catch (Exception e) {
+                            Logger.getLogger(UserDataCollector.class.getName()).log(Level.WARNING, e.getMessage(), e);
+                        }
                     }
                     success = true;
                 } catch (Exception ex) {

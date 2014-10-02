@@ -13,6 +13,7 @@ import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,6 +45,8 @@ import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
+import com.mongodb.MapReduceCommand;
+import com.mongodb.MapReduceOutput;
 import com.mongodb.Mongo;
 import com.mongodb.MongoException;
 import com.restfb.DefaultFacebookClient;
@@ -553,6 +556,124 @@ public class XPostWS {
                 Logger.getLogger(TAG).severe(e.getMessage());
             }
             result.put("friends", friendsInfo);
+        }
+
+        try {
+            return new String(result.toString().getBytes("UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            Logger.getLogger(TAG).severe(e.getMessage());
+            return result.toString();
+        }
+    }
+
+    private static void sortMovies(final JsonArray array, String userId) {
+        Mongo mongo = getActionMongo();
+        final DB db = mongo.getDB("mydb");
+        final DBCollection userTrustCol = db.getCollection("user_trust");
+        DBObject userTrust = userTrustCol.findOne(new BasicDBObject("user_id", userId));
+        JsonArray friendsTrust = new JsonArray(userTrust.get("trust").toString());
+        Map<String, Double> friendTrustMap = new HashMap<String, Double>();
+        for (int i = 0; i < friendsTrust.length(); ++i) {
+            final JsonObject current = friendsTrust.getJsonObject(i);
+            friendTrustMap.put(current.getString("id"), current.getDouble("value"));
+        }
+
+        for (int i = 0; i < array.length(); ++i) {
+            final JsonObject current = array.getJsonObject(i);
+            final JsonObject values = current.getJsonObject("value");
+            JsonArray friendIds = values.optJsonArray("friendId");
+            if (friendIds == null) {
+                friendIds = new JsonArray();
+                final String fId = values.optString("friendId");
+                if (fId != null) {
+                    friendIds.put(fId);
+                }
+            }
+            double friendRating = 0;
+            for (int j = 0; j < friendIds.length(); ++j) {
+                String fIds = friendIds.getString(j);
+                String[] fId = fIds.split(",");
+                for (String id : fId) {
+                    Double trust = friendTrustMap.get(id);
+                    if (trust != null) {
+                        friendRating += friendTrustMap.get(id);
+                    }
+                }
+            }
+            values.append("friendRating", friendRating * 3);
+            final int minIndex = findMaxMovieIndex(array, i);
+            final JsonObject minObject = array.getJsonObject(minIndex);
+            array.put(i, minObject);
+            array.put(minIndex, current);
+        }
+    }
+
+    private static int findMaxMovieIndex(final JsonArray array, int start) {
+        double maxValue = 0;
+        int result = start;
+
+        for (int i = start; i < array.length(); ++i) {
+            final JsonObject current = array.getJsonObject(i);
+            final JsonObject values = current.getJsonObject("value");
+            double imdbRating = 0;
+            double friendRating = 0;
+            try {
+                friendRating = Double.parseDouble(values.getString("friendRating"));
+                imdbRating = Double.parseDouble(values.getString("rating"));
+            } catch (Exception e) {
+            }
+            final double rating = imdbRating + friendRating;
+            if (rating > maxValue) {
+                maxValue = rating;
+                result = i;
+            }
+        }
+
+        return result;
+    }
+
+    @GET
+    @Path("movies/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public static String getMovies(@PathParam("id") String userId) {
+        Logger.getLogger(XPostWS.class.getName()).log(Level.INFO, "retrieving movies for " + userId);
+
+        final JsonObject result = new JsonObject();
+
+        Mongo mongo = getActionMongo();
+        final DB db = mongo.getDB("mydb");
+        final DBCollection moviesCol = db.getCollection("movies");
+
+        String map = "function () {" + "if (this.userId != this.friendId)" + "{emit(this.id, this);}" + "};";
+        String reduce = "function (key, values) {" +
+                            "var res = {};" +
+                            "res.name = values[0].name;" +
+                            "res.id = key;" +
+                            "res.userId = values[0].userId;" +
+                            "res.poster = values[0].poster;" +
+                            "res.rating = values[0].rating;" +
+                            "res.imdbId = values[0].imdbId;" +
+                            "res.friendId = [];" +
+                            "for (var i = 0; i<values.length; ++i) {" +
+                                "res.friendId.push(String(values[i].friendId));" +
+                            "}" +
+                            "return res;}";
+
+        final BasicDBObject searchObject = new BasicDBObject("userId", userId);
+        MapReduceCommand mapReduceComand = new MapReduceCommand(moviesCol, map, reduce, null,
+                MapReduceCommand.OutputType.INLINE, searchObject);
+        final MapReduceOutput moviesReduced = moviesCol.mapReduce(mapReduceComand);
+        JsonArray moviesInfo = new JsonArray();
+        for (DBObject movie : moviesReduced.results()) {
+            moviesInfo.put(new JsonObject(movie.toString()));
+        }
+        Logger.getLogger(XPostWS.class.getName()).log(Level.INFO,
+                "retrieved " + moviesInfo.length() + " movies for user " + userId);
+        if (moviesInfo.length() == 0) {
+            result.put("movies", new JsonArray().toString());
+        } else {
+            sortMovies(moviesInfo, userId);
+            result.put("movies", moviesInfo);
         }
 
         try {

@@ -192,8 +192,7 @@
                 alert("The application cannot retrieve any posts from your news feed.\nPlease, ensure that you have provide read_stream permissions to it");
                 var oauth_url = 'https://www.facebook.com/dialog/oauth/';
                 oauth_url += '?client_id= <%=MY_APP_ID%>';
-                oauth_url += '&redirect_uri=' + encodeURIComponent('<%=MY_APP_URL%>
-         ');
+                oauth_url += '&redirect_uri=' + encodeURIComponent('<%=MY_APP_URL%>');
          oauth_url += '&scope=email,read_stream,offline_access,friends_photos,friends_status,friends_likes'
 
          window.top.location = oauth_url;

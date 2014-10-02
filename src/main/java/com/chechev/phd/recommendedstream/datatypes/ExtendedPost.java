@@ -16,11 +16,15 @@ import java.util.Map;
  */
 public class ExtendedPost extends Post { 
 
+    private static final long serialVersionUID = 2269900000639168705L;
+
     @Facebook
     private String story;
     @Facebook("story_tags")
     private JsonObject rawStoryTags;
     private Map<String, List<MessageTag>> storyTags = new HashMap<String, List<MessageTag>>();
+    @Facebook
+    private Long sharesCount;
 
     public String getStory() {
         return story;

@@ -136,6 +136,10 @@
                 <td width="60px">
                     <a href="/RecommendedStream/">Home</a>
                 </td>
+                <td width="60px">
+                    <a href="/RecommendedStream/movies.jsp">Movies</a>
+                </td>
+
                 <td>
             <center>
                 <font size="5">News Feed</font>
