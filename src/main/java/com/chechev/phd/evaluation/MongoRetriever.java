@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.logging.Logger;
 
 import com.chechev.phd.recommendedstream.services.UserEvent;
+import com.chechev.phd.utils.GlobalConstants;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
@@ -66,7 +67,7 @@ public class MongoRetriever {
 	private DB getDb() {
 		Mongo mongo = null;
 		try {
-			mongo = new Mongo("127.0.0.1", 7275);
+			mongo = new Mongo("127.0.0.1", GlobalConstants.MONGODB_PORT);
 		} catch (UnknownHostException e) {
 			Logger.getLogger(TAG).severe(e.getMessage());
 		} catch (MongoException e) {

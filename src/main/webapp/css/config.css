@@ -7,10 +7,10 @@
 
 .name-container {
 	white-space: nowrap;
-  	overflow: hidden;
-  	text-overflow: ellipsis;
-  	text-align: center;
-  	width: 50px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: center;
+	width: 50px;
 }
 
 h3 {
@@ -47,4 +47,23 @@ h3 {
 
 .interesting table, .notInteresting table {
 	width: 100% !important;
+}
+
+.movie-item-container {
+	display: inline-block !important;
+	width: 200px;
+	font: 10px sans-serif;
+	text-align: center;
+}
+
+.movie-item-container .name-container {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: center;
+	width: 200px;
+}
+
+.movie-item-container .movie-poster {
+	width: 100px;
 }
